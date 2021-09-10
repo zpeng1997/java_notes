@@ -130,6 +130,6 @@ public class SerSingleton implements java.io.Serializable{
 * 2. 真实主题: 真正实现业务逻辑的类.
 * 3. 代理类: 代理和封装真实主题
 * 4. Main: 客户端, 利用主题接口 和 代理类完成一些工作.
-![]() 
+![java代理类](https://github.com/zpeng1997/java_notes/blob/master/picture/java程序性能优化_代理类.jpg) 
 
   
