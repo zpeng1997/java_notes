@@ -637,15 +637,175 @@ public class BusinessDelegate{
 
 ## 2.2 常用优化组件和方法
 
+### 缓冲
+> 缓冲过小不会起作用, 缓冲过大则会浪费系统内存, 增加GC负担.
+```java
+// BufferWriter 为FileWriter对象增加缓冲能力
+public BufferedWriter(Writer out);
+// 可以指定缓冲区大小
+public BufferedWriter(Writer out, int sz);
 
+// BufferedOutputStream为所有OutputStream提供缓冲能力
+public BufferedOutputStream(OutputStream out);
+public BufferedOutputStream(OutputStream out, int size);
 
+// NIO的Buffer类族提供更为强大的专业的缓冲控制能力(第三章).
+// 比如画图, 直接动图会有点卡, 若是把点放在内存, 最后一次性的给出, 这样就会快很多.
+```
 
+### 缓存
+> EHCache, OSCache 和 JBossCache
 
+### 对象复用 —— "池"
+> C3P0 和 Proxool 数据库链接池组件
+> JDK中, new操作的效率相当高, 不需要担心频繁的new给性能的影响; 但是new操作时调用的类构造函数可能是非常费时的, 对于这些对象可以考虑池化.
 
+### 并行代替串行
 
+### 负载均衡
+* 使用tomcat集群
+> 黏性session模式: 均匀分配到tomcat集群, 但是一旦一个节点宕机, 它所维护的Session信息将丢失.
 
+> 复制session模式: session信息每个机器都有一份, 但是一旦一个节点Session信息修改了, 会通过广播修改其它所有的机器上的Session信息.
 
+* 使用terracotta: 跨JVM虚拟机
+> 多个Java应用服务器之间共享缓存.
 
+### 时间换空间
 
+### 空间换时间
 
+# 3. Java程序优化
 
+## 3.1 字符串优化处理
+* String对象的定义: 1. char数组 2. offset偏移 3. count长度
+* String对象的3个基本特点:
+* 1. 不变性: String对象一旦生成, 不能再发生改变.
+* 2. 针对常量池的优化: 当两个String对象拥有相同值时, 它们只引用常量池中的同一个拷贝. 同一个字符串反复出现时, 会大幅节省内存空间.
+![String优化]()
+* 3. final类: 不能有任何子类。使用final定义, 有助于虚拟机寻找机会, 内联所有的final方法, 从而提升系统效率。(优化方法在JDK1.5以后, 效果就不明显了);
+
+### subString()方法的内存泄露
+```java
+public String substring(int beginIndex);
+public String substring(int beginIndex, int endIndex);
+// 第二种方法, 在JDK的实现中存在严重的内存泄露问题
+public String substring(int beginIndex, int endIndex){
+    if(beginIndex < 0){
+        throw new StringIndexOutOfBoundsException(beginEndex);
+    }
+    if(endIndex > count){
+        throw new StringIndexOutOfBoundsException(endIndex);
+    }
+    if(beginIndex > endIndex){
+        throw new StringIndexOutOfBoundsException(endIndex - beginIndex);
+    }
+    // 问题出来新建String对象
+    // 若偏移量offset很小, 但是原始的字符串很大
+    // 就出现一个问题就是, 用的很少, 但是占用的空间很大.
+    // 利用的是空间换时间的思想
+    return ((beginIndex == 0) && （endIndex == count)) ? this : new String(offset + beginIndex, endIndex - beginIndex, value);
+}
+
+// String的构造函数
+// package private constructor which shares value array for speed
+String(int offset, int count, char value[]){
+    this.value = value; // 直接复制原串
+    this.offset = offset;
+    this.count = count;
+}
+```
+* 使用一个例子说明这个方法的弊端
+```java
+public static void main(String args[]){
+    List<String> handler = new ArraryList<String>();
+    // HugeStr 不到1000次就会内存溢出
+    // 但是ImproveHuge不会
+    for(int i = 0; i < 1000; i ++){
+        HugeStr h = new HugeStr();
+        ImproveHugeStr h = new ImproveHugeStr();
+        handler.add(h.getSubString(1, 5));
+    }
+}
+
+static class HugeStr{
+    private String str = new String(new char[100000]);
+    // 截取字符串, 有溢出
+    public String getSubString(int begin, int end){
+        return str.substring(begin, end);
+    }
+}
+
+static class ImproveHugeStr{
+    private String str = new String(new char[100000]);
+    // 新的字符串, 没有溢出
+    public String getSubString(int begin, int end){
+        return new String(str.substring(begin, end));
+    }
+}
+// 而且所有引用String(int offset, int count, char value[])构造函数的方法都存在一样的内存泄露.
+toString(int);
+toString(long);
+concat(String);
+replace(char, char);
+substring(int, int);
+toLowerCase(Locale);
+toUpperCase(Locale);
+valueOf(char);
+```
+
+### 字符串分割和查找
+> split很强大, 但是对于简单的字符串分割功能而言, 它却不尽人意.
+```java
+// 第一种方法:
+// split分割, 10000次, 3703ms
+String orgStr = null;
+StringBuffer sb = new StringBuffer();
+for(int i = 0; i < 1000; i ++){
+    sb.append(i);
+    sb.append(";");
+}
+orgStr = sb.toString();
+for(int i = 0; i < 10000; i ++){
+    orgStr.split(";");
+}
+
+// 第二种方法:
+//StringTokenizer类 构造函数
+// delim是分隔符, s
+public StringTokenizer(String str, String delim);
+// 2704ms
+StringTokenizer st = new StringTokenizer(orgStr, ";");
+for(int i = 0; i < 10000; i ++){
+    while(st.hasMoreTokens()){
+        st.nextToken();
+    }
+    st = new StringTokenizer(ortStr, ";");
+}
+
+// 第三种方法: 671ms
+// 说明indexOf 和 subString函数可以作为高频函数使用.
+// 使用indexOf 和 subString() 注意内存泄露即可
+public int indexOf(int ch); // 返回字符在String对象中的位置
+String tmp = orgStr;
+for(int i = 0; i < 10000; i ++){
+    while(true){
+        String splitStr = null;
+        int j = tmp.indexOf(';'); // 找分隔符的位置
+        if(j < 0) break;
+        splitStr = tmp.substring(0, j);
+        tep = tmp.substring(j + 1);
+    }
+    tem = orgStr;
+}
+
+// indexOf 功能相反, 但是同样高效的函数
+public char charAt(int index);
+// 通常我们会判断一个字符串的开始和结束是否等于某个子串
+// 效率要比charAt要低很多
+public boolean startsWith(String prefix);
+public boolean endsWith(String suffix);
+// charAt 每个比较要比 startWith 和 endsWith好
+```
+
+### StringBuffer 和 StringBuilder
