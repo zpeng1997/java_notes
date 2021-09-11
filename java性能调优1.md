@@ -131,5 +131,105 @@ public class SerSingleton implements java.io.Serializable{
 * 3. 代理类: 代理和封装真实主题
 * 4. Main: 客户端, 利用主题接口 和 代理类完成一些工作.
 ![java代理类](https://github.com/zpeng1997/java_notes/blob/master/picture/java程序性能优化_代理类.jpg) 
-
+![java代理类实现](https://github.com/zpeng1997/java_notes/blob/master/picture/java%E7%A8%8B%E5%BA%8F%E6%80%A7%E8%83%BD%E4%BC%98%E5%8C%96_%E4%BB%A3%E7%90%86%E6%A8%A1%E5%BC%8F%E5%AE%9E%E7%8E%B0.jpg)
   
+```java
+// DBQuery的实现:
+public class DBQuery inplements IDBQuery{
+    public DBQuery(){
+        try{
+            Thread.sleep(1000); // 可能包含数据库链接等耗时操作
+        }catch (InterruptedException e){
+            e.printStackTrace();
+        }
+    }
+    @Override
+    public String request(){
+        return "request string";
+    }
+}
+
+// 代理类DBQueryProxy轻量级对象, 代理DBQuery
+public class DBQueryProxy implements IDBQuery{
+    private DBQuery real = null;
+    @Override
+    public String request(){
+        // 真正需要的时候, 才会创建真实对象, 创建过程很慢
+        if(real == null) real = new DBQuery();
+        // 多线程模式下, 返回一个虚假类, 类似Future模式
+        return real.request();
+    }
+}
+
+// 主函数引用IDBQuery接口
+public class Main{
+    public static void main(String args[]){
+        IDBQuery q = new DBQueryProxy(); // 使用代理
+        q.request(); // 真正使用时才会创建.
+    }
+}
+```
+
+### 动态代理
+> 不需要为真实主题写一个形式上完全一样的封装类, 加入主题接口中的方法很多, 为每一个接口写一个方法也是十分的烦人.
+
+> 动态代理使用字节码动态生成加载技术, 在运行时生成并加载类.
+
+> 生成动态代理类的方法: JDK自带的动态代理(弱), CGLIB(功能强大, 性能中等), Javassist(功能强大, 性能中等) 或者 ASM库(性能高, 维护性差).
+
+> 动态代理实现
+```java
+// JDK的动态代理生成代理对象, 需要实现一个处理方法调用的Handler, 英语实现代理方法的内部逻辑.
+public class JdkDbQueryHandler implements InvocationHandler{
+    IDBQuery real = null; // 主题接口
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable{
+        if(real == null) real = new DBQuery(); // 第一次调用, 则生成真是对象
+        return real.request(); // 真实主题的完成的实际操作.
+    }
+}
+// 使用handler生成动态对象.
+public static IDBQuery createJdkProxy(){
+    // newProxyInstance返回该代理的一个实例
+    IDBQuery jdkProxy = (IDBQuery) Proxy.newProxyInstance(
+        ClassLoader.getSystemClassLoader(),
+        new Class[] {IDBQuery.clss},
+        new JdkDbQueryHandler()
+    );
+    return jdkProxy;
+}
+
+
+// CGLIB生成动态代理
+// 切入类
+public class CglibSbQueryInterceptor implements MethodInterceptor{
+    IDBQuery real = null;
+    @Override
+    public Object intercept(Object arg0, Method arg1, Object[] arg2, MethodProxy arg3) throws Throwable{
+        if(real == null) real = new DBQuery();
+        return real.request();
+    }
+}
+
+public static IDBQuery createCglibProxy(){
+    Enhancer enhancer = new Enhancer();
+    // 指定切入器, 定义代理类逻辑
+    enhancer.setCallback(new CglibDbQueryInterceptor());
+    // 指定实现的接口
+    enhancer.setInterfaces(new Class[] {IDBQuery.class});
+    // 生成代理类的实例
+    IDBQuery cglibProxy = (IDBQuery) enhancer.create();
+    return cglibProxy;
+}
+
+// Javassist 有两种方法, 这里就不写了.
+```
+
+### 经典应用: Hibernate框架中.
+> Hibernate的延迟加载分为: 1.属性延迟加载, 2.关联表的延时加载.
+```java
+// 代码在书里, 不抄了.
+```
+
+
+## 享元模式
