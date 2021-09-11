@@ -233,3 +233,87 @@ public static IDBQuery createCglibProxy(){
 
 
 ## 享元模式
+> 少数几个以提高系统性能为目的模式之一; 用来复用大对象.
+
+> 解决的问题: 一个系统的多个对象, 只需要一个对象的拷贝; 然后因为需要生产和管理对象, 所以一般需要一个工厂类.
+
+> 提升了哪里的性能? 1.创建的对象减少, 耗时减少. 2. 需要内存减少, GC的压力少.
+
+### 享元模式的组成部分
+* 享元工厂: 创建具体的享元类, 维护享元对象. 算法类似单例模式.
+* 抽象享元: 定义接口
+* 具体享元: 实现接口
+* Main: 通过享元工厂获的对象. 
+![享元模式]()
+
+### 享元模式的例子
+> 三个公司用同一套系统查询员工信息, 我们可以维护三个享元模式的数据库链接, 每一个数据库链接对象对应公司. 
+> 相同公司的员工, 享用同一个数据库链接; 而且不同公司的数据库链接是不同的.
+> 享元模式与对象池的区别: 享元模式的每个对象都是不同的, 对象池中所有对象都是相同的可以替换.
+![java程序性能优化_享元模式示例]()
+
+```java
+// 享元对象接口, 用于创建一个报表
+public interface IReportManager{
+    public String createReport();
+}
+
+// 两个报表的生成实例, 分别对应员工财务收入报表和员工个人x信息报表
+public class FinancialReportManager implements IReportManager{ // 财务报表
+    protected String tenantID = null;
+    // 租户
+    public FinancialReportManager(String tenantId){
+        this.tenantId = tenantId;
+    }
+    @Override
+    public String createReport(){
+        return "This is a financial report";
+    }
+}
+
+public class EmployeeReportManager implements IReportManager{ // 员工报表
+    protected String tenantId = null;
+    // 租户
+    public EmployeeReportManager(String tenantId){
+        this.tenantId = tenantId;
+    }
+    @Override
+    public String createReport(){
+        return "This is a employee report";
+    }
+}
+
+// 享元模式的精髓:
+// 享元工厂类
+public class ReportManagerFactory{
+    Map<String, IReportManager> financialReportManager = new HashMap<String, IReportManager>();
+    Map<String, IReportManager> employeeReportManager = new HashMap<String, IReportManager>();
+    IReportManager getFinancialReportManager(String tenantId){
+        IReportManager r = financialReportManager.get(tenantId);
+        if(r == null) {
+            r = new FinancialReportManager(tenantId);
+            // 维护已创建 享元对象
+            finfncialReportManager.put(tenantID, r);
+        }
+        return r;
+    }
+
+    IReportManager getEmployeeReportReportManager(String tenantId){
+        IReportManager r = employeeReportManager.get(tenantId);
+        if(r == null){
+            r = new EmployeeReportManager(tenantId);
+            employeeReportManger.put(tenantId, r);
+        }
+        return r;
+    }
+}
+
+// 享元模式的使用方法如下:
+public static void main(Stirng[] args){
+    ReportManagerFactory rmf = new ReportManagerFactory();
+    IReportManager rm = rmf.getFinancialReportManager("A");
+    System.put.println(rm.createReport());
+}
+```
+
+
