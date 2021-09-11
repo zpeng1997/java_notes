@@ -335,7 +335,7 @@ public static void main(Stirng[] args){
 ```java
 // 装饰接口
 public interface IPacketCreator{
-    public String handleContent)(); // 用于内容处理
+    public String handleContent(); // 用于内容处理
 }
 // 用于返回数据包的核心数据
 public class PacketBodyCreator implements IPacketCreator{
@@ -363,7 +363,7 @@ public class PacketHTMLHeaderCreator extends PacketDecorator{
         StirngBuffer sb = new StringBuffer();
         sb.append("<html>");
         sb.append("<body>");
-        sb.apped(component.handleContend());
+        sb.apped(component.handleContent());
         sb.append("</body>");
         sb.append("</html>\n");
         return sb.toString();
@@ -375,19 +375,72 @@ public class PacketHTTPHeaderCreator extends PacketDecorator{
         super(c);
     }
     @Override
-    public String handleContend(){
+    public String handleContent(){   // 数据加上HTTP文件头.
         StringBuffer sb = new StringBuffer();
         sb.append("Cache-Control:no-cache\n");
         sb.append("Date:Mon,11Sep202111:31:00GMT\n");
-        sb.append(component.handleContend());
+        sb.append(component.handleContent());
         return sb.toString();
     }
 }
 // 装饰者模式的使用方法
 public class Main(){
     public static void main(String[] args){
+        // java用法?
         IPacketCreator pc = new PacketHTTPHeaderCreator(new PackerHTMLHeaderCreator(new PacketBodyCreator()));
-        System.out.println(pc.handleContend());
+        System.out.println(pc.handleContent());
     }
 }
 ```
+> 装饰者模型在JDK的例子: OutputStream 和 InputStream类族
+![装饰者在OutputStream类族]()
+![装饰者在OutputStream类族2]()
+![装饰者在OutputStream类族3]()
+
+## 观察者模式
+> (非常常见)一个对象需要另一个对象的状态时需要.
+![观察者模式结构]()
+
+### 观察者模式结构
+* 主题接口: 被观察的对象, 若状态发生改变, 它会通知观察者
+* 具体主题: 实现主题接口中的方法. 内部维护一个观察者的列表
+* 观察者接口: 定义观察者的基本方法, 对象状态发生改变时, 主题接口会调用观察者update方法
+* 具体观察者: 实现观察者接口的update().
+
+```java
+// 主题接口的实现
+public interface ISubject{
+    void attach(IObserver observer); // 添加观察者
+    void detach(IObserver observer); // 删除观察者
+    void inform();
+}
+// 观察者接口的实现
+public interface IObserver{
+    void update(Event evt); // 更新观察者
+}
+//
+public class ConcreteSubject implements ISubject{
+    Vector<IObserver> observers = new Vector<IOvserver>();
+    public void attach(IObserver observer){
+        observers.addElement(observer);
+    }
+    public void detach(IObserver observer){
+        observers.removeElement(observer);
+    }
+    public void inform(){
+        Event evt = new Event();
+        for(IObserver ob : observers){
+            ob.update(evt); // 注意, 这里通知观察者
+        }
+    }
+}
+// 具体观察者的实现
+public class ConcreteObserver implements IObserver{
+    public void update(Event evt){
+        System.out.println("observer receives information");
+    }
+}
+```
+> 观察者模式非常常用, JDK中有为开发人员准备到一套观察者模式, java.util.Observable类 和 java.util.Observer接口.
+![java观察者模式_JDK内置的观察者]()
+
