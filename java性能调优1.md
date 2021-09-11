@@ -444,3 +444,208 @@ public class ConcreteObserver implements IObserver{
 > 观察者模式非常常用, JDK中有为开发人员准备到一套观察者模式, java.util.Observable类 和 java.util.Observer接口.
 ![java观察者模式_JDK内置的观察者]()
 
+## Value Object 模式
+> 减少交互次数, 直接把需要的信息封装后统一发出.
+![java程序性能优化_原来的模式]()
+![java程序性能优化_现在的模式]()
+
+```java
+// RMI服务端的接口实现
+public interface IOrderManager extends Remote{
+    // Value Object模式
+    public Order getOrder(int id) throws RemoteException;
+    // 原来的模式
+    public String getClientName(int id) throws RemoteException;
+    public String getProdName(int id) throws RemoteException;
+    public int getNumber(int id) throws RemoteException;
+}
+
+// 一个最简单的IOrderManager的实现, 什么也没有做, 只是返回数据.
+public class OrderManager extends UnicastRemoteObject implements IorderManager{
+    protected OrderManager() throws RemoteException{
+        super();
+    }
+    private static final long serialVersionUID = -1717013007581295639L;
+    @Override
+    public Order getOrder(int id) throws RemoteException{
+        // 返回订单消息
+        Order o = new Order();
+        o.setClientName("billy");
+        o.setNumber(20);
+        o.setProdunctName("desk");
+        return o;
+    }
+    @Override
+    public String getClientName(int id) throws RemoteException{
+        // 返回订单的客户名
+        return "billy";
+    }
+    @Override
+    public String getProdName(int id) throws RemoteException{
+        return "desk";
+    }   
+    @Override
+    public int getNumber(int id) throws RemoteException{
+        // 返回数量
+        return 20;
+    }
+}
+
+// value Object的Order对象实现如下
+public class Order implements java.io.Serializable{
+    private int orderid;
+    private String clientName;
+    private int number;
+    private String prodenctName;
+    // 省略 setter getter方法
+}
+
+// 业务逻辑层注册并开启RMI服务器
+public class OrderManagerServer{
+    public static void main(String[] argv){
+        try
+        {
+            // 注册RMI端口
+            LocateRegistry.createRegistry(1099);
+            // RMI远程对象
+            IOrderManager usermanager = new OrderManager();
+            // 绑定RMI对象
+            Naming.rebind("OrderManager", usermanager);
+            System.out.println("OrderManager is ready.");
+        }
+        catch(Exception e)
+        {
+            System.out.println("OrderManager Server failed：" + e);
+        }
+    }
+}
+
+// 客户端测试代码, 分别展示使用Value Object模式和不使用的性能差异
+public static void main(String[] argv){
+    try{
+        IOrderManager usermanager = (IOrderManager) Naming.lookup("OrderManager");
+        long begin = System.currentTimeMillis();
+        for(int i = 0; i < 1000; i ++){
+            usermanager.getOrder(i); // Value Object 模式
+        }
+        System.out.println("getOrder spend:" + 
+                            (System.currentTimeMillis() - begin));
+        begin = System.currentTimeMillis();
+        for(int i = 0; i < 1000; i ++){
+            // 多次交互获取数据
+            usermanager.getClientName(i);
+            usermanager.getNumber(i);
+            usermanager.getProdName(i);
+        }
+        System.out.println("3 Method call spend:"
+                            + (System.currentTimeMillis() - begin));
+        System.out.println(usermanager.getOrder(0).getClientName());
+    } catch(Exception e){
+        System.out.println("OrderManager exception: " + e);
+    }
+}
+// 结果使用getOrder方法相对耗时469ms
+// 连续使用3次离散的远程调用需要766ms
+```
+
+## 业务代理模式
+> 类比Value Object模式, 业务代理是把一组由远程方法调用构成的业务流程, 封装在代理类中.
+
+> 问题: 1. 展示层存在大量并发线程. 2. 缺乏对订单的有效封装, 将来流程发生变化时, 展示层组件需要修改时不好修改.
+![java程序性能优化_业务代理1]()
+![java程序性能优化_业务代理2]()
+
+```java
+// 未使用业务代理模式
+public static void main(String[] argv){
+    try{
+        IOrderManager usermanager = (IOrderManager) Naming.lookup("OrderManager");
+        // 所有的远程调用都会被执行
+        // 当并发量较大时, 严重影响性能
+        if(usermanager.checkUser(1)){
+            Order o = usermanager.getOrder(1);
+            o.setNumber(10);
+            usermanager.updateOrder(o);
+        }catch (Exception e){
+            System.out.println("OrderManager exception: " + e);
+        }
+    }
+}
+
+// 使用业务代理模式
+// 只会把updateOrder提供给展示层.
+public static void main(String[] argv) throws Exception{
+    BusinessDelegate bd = new BusinessDelegate();
+    Order o = bd.getOrder(11);
+    o.setNumber(11);
+    bd.updateOrder(o); // 使用业务代理完成订单
+}
+
+// BussinessDelegate中, 可以增加缓存, 从而减少
+// 远程调用方法调用的数
+public class BusinessDelegate{
+    // 封装远程方法调用的流程
+    IOrderManager usermanager = null;
+    public BussinessDelegate(){
+        try{
+            usermanager = (IOrderManager) Naming.lookup("OrderManager");
+        }catch(MalformedURLException e){
+            e.printStackTrace();
+        }catch(RemoteExecption e){
+            e.printStackTrace();
+        }catch(NotBoundException e){
+            e.printStackTrace();
+        }
+    }
+
+    public boolean checkUserFormCache(int uid){
+        return true;
+    }
+    public boolean checkUser(int uid) throws RemoteException{
+        // 当前对象被多个客户端共享
+        // 可以在本地缓存中校验用户
+        if(!checkUserFormCachce(uid)){
+            return usermanager.checkUser(1);
+        }
+        return true;
+    }
+    public Order getOrderFormCache(int oid){
+        return null;
+    }
+    public Order getOrder(int oid) throws RemoteException{
+        // 可以在本地缓存中获取订单
+        // 减少远程方法调用次数
+        Order order = getOrderFromCache(oid);
+        if(order == null){
+            return usermanager.getOrder(oid);
+        }
+        return order;
+    }
+    public boolean updateOrder(Order order) throws Execption{
+        // 暴露给展示层的方法
+        // 封装了业务流程, 可能在缓存中执行
+        if(checkUser(1)){
+            Order o = getOrder(1);
+            o.setNumber(10);
+            usermanager.updateOrder(o);
+        }
+        return true;
+    }
+}
+```
+
+
+## 2.2 常用优化组件和方法
+
+
+
+
+
+
+
+
+
+
+
+
+
