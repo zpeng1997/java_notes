@@ -316,4 +316,78 @@ public static void main(Stirng[] args){
 }
 ```
 
+## 装饰者模式
+> 合成/聚合复用原则, 可以动态添加对象功能.
 
+> 代码复用尽可能使用委托而不是用继承, 继承是一种紧密耦合, 任何父类的改动都会影响子类, 不利于系统维护; 而委托是松散耦合, 只要接口不变, 委托类的改动并不会影响其上层对象.
+![装饰者模式]()
+
+### 装饰者模式的组成
+* 组件接口: 是装饰者和被装饰者的超类或者接口, 它定义了被装饰者的核心功能和被装饰者需要加强的功能点.
+* 装饰者: 实现组件接口, 并持有一个具体的被装饰对象.
+* 具体组件: 实现组件接口的核心方法, 完成某一个具体的业务逻辑. 也是被装饰者的对象.
+* 具体装饰者: 实现装饰的业务逻辑, 即实现分离的各个增强功能点。各个具体装饰者可以相互叠加, 构成一个功能更强大的组件对象.
+
+### 装饰者模式典型案例
+> 装饰者模式一个典型案例就是对输出结果进行增强. 例如需要将一个文本, 通过HTML发布, 首先要转化为HTML文本, 其次还要加上一个HTTP头, 还可能要安置TCP等等. 装饰者模式可以将这些分为独立的模块, 灵活的装配.
+![装饰者模式示例]()
+
+```java
+// 装饰接口
+public interface IPacketCreator{
+    public String handleContent)(); // 用于内容处理
+}
+// 用于返回数据包的核心数据
+public class PacketBodyCreator implements IPacketCreator{
+    @Override
+    public String handleContent(){
+        return "Content of Packet"; // 构造核心数据, 但不包括格式
+    }
+}
+// packetDecorator维护核心组件component对象, 他负责告诉其子类, 其和新业务逻辑应该全权委托component完成, 自己只是增强处理
+public abstract class PacketDecorator implements IPacketCreator{
+    IPacketCreator component;
+    public PacketDecorator(IPacketCreator c){
+        component = c;
+    }
+}
+// PacketHTMLHeaderCreator 是具体的装饰器, 它负责对核心发布的内容进行HTML格式化操作
+// 特别注意: 它委托了具体组件component进行核心业务处理
+public class PacketHTMLHeaderCreator extends PacketDecorator{
+    public PacketHTMLHeaderCreator(IPacketCreator c){
+        super(c):
+    }
+    @Override
+    // 将给定数据封装成HTML
+    public String handleContent(){
+        StirngBuffer sb = new StringBuffer();
+        sb.append("<html>");
+        sb.append("<body>");
+        sb.apped(component.handleContend());
+        sb.append("</body>");
+        sb.append("</html>\n");
+        return sb.toString();
+    }
+}
+// PacketHTTPHeaderCreator与PacketHTMLHeaderCreator类似, 但是它完成HTTP头部处理, 其余依然交给内部的component完成
+public class PacketHTTPHeaderCreator extends PacketDecorator{
+    public PacketHTTPHeaderCreator(IPacketCreator c){
+        super(c);
+    }
+    @Override
+    public String handleContend(){
+        StringBuffer sb = new StringBuffer();
+        sb.append("Cache-Control:no-cache\n");
+        sb.append("Date:Mon,11Sep202111:31:00GMT\n");
+        sb.append(component.handleContend());
+        return sb.toString();
+    }
+}
+// 装饰者模式的使用方法
+public class Main(){
+    public static void main(String[] args){
+        IPacketCreator pc = new PacketHTTPHeaderCreator(new PackerHTMLHeaderCreator(new PacketBodyCreator()));
+        System.out.println(pc.handleContend());
+    }
+}
+```
