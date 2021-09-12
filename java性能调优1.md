@@ -809,3 +809,115 @@ public boolean endsWith(String suffix);
 ```
 
 ### StringBuffer 和 StringBuilder
+> 因为String不可变对象, 若改变则会生成新的对象. 以上是对String创建和修改字符串的工具.
+```java
+// 方法一: 会生成多个String对象(编译器优化有只有一个) 0ms(5万次)
+// 字符串常量静态的连接, 编译器会充分优化, 编译时就可以确定字符串操作.
+String result = "String:" + "and" + "String" + "append";
+// 方法二: 只生成一个result实例  16ms(5万次)
+StringBuilder result = new StringBuilder();
+result.append("String");
+result.append("and");
+result.append("String");
+result.append("append");
+// 方法三: 16ms(5万次)
+String str1 = "String";
+String str2 = "and";
+String str3 = "String";
+String str4 = "append";
+// 这个java编译器会使用StringBuilder优化
+// String s = (new StringBuilder(String.valueOf(str1))).append(str2).append(str3).append(str4).toString();
+String result = str1 + str2 + str3 + str4;
+
+// 情况三: 构建超大的String对象
+// 编译器虽然会优化, 但是请显示使用StringBuilder 或者 StringBuffer
+// A: 1062ms
+for(int i = 0; i < 10000; i ++){
+    str = str + i;
+}
+// A的反编译代码
+for(int i = 0; i < CIRCLE; i ++){
+    // 虽然是用来StringBuilder实现, 但是每次循环都会生成新的StringBuilder实例, 所以降低系统性能.
+    // 而C只有一个StringBuilder实例
+    str = (new StringBuilder(String.valueOf(str))).append(i).toString();
+}
+// B: 360ms
+// 说明concat比+效率高, 但是要低于StringBuilder
+for(int i = 0; i < 10000; i ++){
+    result = result.concat(String.valueOf(i));
+}
+// C: 0ms
+StringBuilder sb = new StringBuilder();
+for(int i = 0; i < 10000; i ++){
+    sb.append(i);
+}
+```
+
+#### StringBuilder和StringBuffer的选择
+* StringBuilder和StringBuffer 都是实现了AbstractStringBuilder抽象类; 区别在于StringBuffer对几乎所有的方法都做了同步(可用于多线程, StringBuilder不行)
+* 非同步, StringBuilder要好一点.
+  
+#### StringBuilder和StringBuffer的容量参数
+* 不指定容量参数, 默认是16个字节  
+* 如果需要的容量超过实际的char数组长度, 会进行扩容, 直接扩大两倍. 若事先知道容量大小, 就可以避免扩容操作(提高系统性能).
+* 实现开的容量大小合适 46ms, 相反 125 ms. 差点3倍, 所以要注意.
+
+
+## 3.2 核心数据结构
+
+### 3.2.1 List接口
+* ArrayList, Vector, LinkedList(循环双向链表, 有header节点)都来自AbstratList的实现
+* ArrayList, Vector都是对内部数组操作, 但是Vector是线程安全的, ArrayList不是.
+* -Xmx512M -Xms512M 参数, 屏蔽GC对程序执行速度测试的干扰
+* ArrayList扩容 是 扩大为 1.5倍.
+* 不要对LinkedList进行 list.get(i)操作, 每次这个操作都会对它的列表遍历操作. for(int i = 0; i < size; i ++) tem = list.get(i); // 直接GG
+* ForEach操作比迭代器迭代操作有多一部分的赋值操作, 所以ForEach操作比迭代器迭代操作稍微慢一点点.
+  
+### 3.2.2 Map接口
+* Hashtable(线程安全), HashMap,  LinkedHashMap, TreeMap
+![java程序性能优化_map的关系]()
+* HashMap的内部结构: 主要依赖于hashCode()或者hash()方法的实现.
+![java程序性能优化_HashMap内部结构]()
+
+* LinkedHashMap 保存输入时的顺序 或者 最近访问的顺序; 迭代器中不可以修改元素, 否则迭代器无效; 当使用最近访问的顺序, 不可以使用get()方法, 因为它读完后会直接把该元素放到末尾(修改了).
+* TreeMap: 性能没有HashMap好(低25%), 但是提供元素排序功能.
+
+
+### 3.2.3 Set接口
+* set不可以重复; 所有的知识对Map结构的封装
+![java程序性能优化_Set类族结构]()
+
+### 3.2.4 优化集合访问代码
+* 1.分离循环中被重复调用的代码
+```java
+for(int i = 0; i < collection.size(); i ++); 
+// int colsiz = collection.size() 代替 collection.size()
+for(int i = 0; i < colsize; i ++)
+```
+* 2.省略相同的操作
+```java
+for(int i = 0; i < colsize; i ++){
+    if( ((String)collection.get(i).indexOf("north") != -1) || (String)collection.get(i).indexOf("west") != -1) || (String)collection.get(i).indexOf("south") != -1)
+    )
+    count ++;
+}
+// 改为
+int colsiz = collection.size()
+for(int i = 0; i < colsize; i ++){
+    if( (s = (String)collection.get(i)).indexOf("north") != -1) || s.indexOf("west") != -1) || s.indexOf("south") != -1)
+    )
+    count ++;
+}
+```
+* 3.减少方法调用: 方法调用需要堆栈
+```java
+int colsiz = this.elementCount;
+for(int i = 0; i < colsize; i ++){
+    if( (s = (String) elementData[i]).indexOf("north") != -1) || s.indexOf("west") != -1) || s.indexOf("south") != -1)
+    )
+    count ++;
+}
+```
+
+### 3.2.5 RandomAccess接口
+* 实现RandomAccess接口的对象是支持快速随机访问的对象
