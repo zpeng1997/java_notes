@@ -921,3 +921,279 @@ for(int i = 0; i < colsize; i ++){
 
 ### 3.2.5 RandomAccess接口
 * 实现RandomAccess接口的对象是支持快速随机访问的对象
+
+## 3.3 使用NIO提升性能
+> NIO: New I/O的简称, 基于块(Block)
+
+> Channel是双向通道(而且可读可写), Stream单向
+```java
+// 读文件的例子:
+FileInputStream fin = new FileInputStream(new File("d:\\temp_buffer.tmp"));
+FileChannel fc = fin.getChannel();
+ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+fc.read(byteBuffer); // 存在ByteBuffer中, 可以关闭Channel了
+fc.close();
+byteBuffer.flip();
+// 文件复制的例子:
+public static void nioCopyFile(String resource, String destination) throws IOException{
+    FileInputStream fis = new FileInputStream(resource);
+    FileOutputStream fos = new FileOutputStream(destionation);
+    FileChannel readChannel = fis.getChannel();
+    FileChannel writeChannel = fos.getChannel();
+    ByteBuffer buffer = ByteBuffer.allocate(1024);
+    while(true){
+        buffer.clear();
+        int len = readChannel.read(buffer);
+        if(len == -1) break;
+        buffer.flip(); // 充值position
+        writeChannel.write(buffer);
+    }
+    readChannle.close();
+    writeChannle.close();
+}
+// position 写或者读的起点
+// limit 写或者读的长度
+// capacity 总的容量
+```
+
+#### 3.3.3 Buffer的相关操作
+```java
+// 堆中分配
+ByteBuffer buffer = ByteBuffer.allocate(1024);
+// 从即有数组中创建
+byte array[] = new byte[1024];
+ByteBuffer buffer = ByteBuffer.wrap(array);
+// 重置和清空缓冲区, 只是重置标志而已. 
+public final Buffer rewind();
+public final Buffer clear();
+public final Buffer flip(); 
+// rewind()函数, position置为零, 清除标志位mark
+out.write(buf);   // 从Buffer读取数据写入Channel
+buf.rewind();     // 回滚Buffer
+buf.get(array);   // 将Buffer的有效数据复制到数组中
+// clear()函数, position置为零, limit设置为capacity大小, 清除mark标志, 
+buf.clear();
+in.read(buf);
+// flip()函数将limit设置到position所在的位置, position置为零, 清除mark. 通常在读写转换时使用
+buf.put(magic);   // magic数组读入buf中
+in.read(buf);
+buf.flip();       // 写状态转化为读状态
+out.write(buf);
+
+// 标志缓冲区
+ByteBuffer b = ByteBuffer.allocate(15);
+for(int i = 0; i < 10; i ++){
+    b.put((byte)i);
+}
+b.flip();
+for(int i = 0; i < b.limit(); i ++){
+    System.out.print(b.get());
+    if(i == 4){
+        b.mark(); // 在mark位置做标记
+        System.out.print("(mark at " + i + ")");
+    }
+}
+b.reset(); // 回到mark位, 处理后面的数据
+System.out.println("\nreset to mark");
+while(b.hasRemaining()){
+    System.out.print(b.get());
+}
+System.out.println();
+
+// 复制缓冲区
+public ByteBuffer duplicate();
+// 两个共享内存, 一方改动另外一个可以看到
+// 但是双方的position, limit, mark是不一样的
+
+// 缓冲区分片
+slice() // 子缓冲区
+
+// 只读缓冲区
+
+// 文件映射到内存: 更加快!
+
+// 处理结构化数据: 散射 与 聚集
+
+```
+
+#### 3.3.5 直接内存访问
+* DirectBuffer
+... 中间省略了好几节, 不太想看了 > 以后再补
+
+
+# 4. 并行程序开发以及优化
+## 并行程序设计模式
+> Future模式, Master-Worker模式, Guarded Suspeionsion模式, 不变模式, 生产者-消费者模式
+
+### Future模式
+> JDK支持的Future模式更加强大, 以下只是简陋的初步.
+![java程序性能优化_Future模式]()
+```java
+// 一个是代理模式. 
+// 另一个是使用了同步的思想.
+
+// 1.Main函数的实现: 主要负责调用Client发起请求, 并使用返回的数据
+public static void main(String[] args){
+    Client client = new Client();
+    // 这里会立即返回, 因为得到的是FutureData而不是RealData
+    Data data = client.request("name");
+    System.out.println("请求完毕");
+    try{
+        // 这里可以用一个sleep代替对其他的业务逻辑处理
+        // 处理这些业务的过程中, RealData被创建, 充分利用等待时间 
+        Thread.sleep(2000);
+    }catch(InterruptedException e){}
+    // 使用真实的数据
+    System.out.println("数据 = " + data.getResult());
+}
+
+// Client的实现
+// 主要实现了获取FutureData, 开启构造RealData的线程, 接受请求后很快的返回FutureData.
+public class Client{
+    public Data request(final String queryStr){
+        final FutureData future = new FutureData();
+        new Thread(){
+            public void run(){
+                // RealData的构建很慢
+                // 所以在单独的线程中进行
+                RealData realdata = new RealData(queryStr);
+                future.setRealData(realdata);
+            }
+        }.start();
+        return future; // FutureData会被立即返回.
+    }
+}
+
+// Data的实现
+// 提供了getResult()方法, 无论FutureData或者RealData都实现了这个接口.
+public interface Data{
+    public String getResult();
+}
+
+// FutureData实现
+// 实际上就是RealData的代理, 封装了获取RealData的过程
+public class FutureData implements Data{
+    protected RealData realdata = null; // FutureData 是 RealData的包装
+    protected boolean isReady = false;
+    public synchronized void setRealData(RealData realdata){
+        if(isReady) return;
+        this.realdata = realdata;
+        isReady = true;
+        notifyAll(); // 通知getResult()
+    }
+    public synchronized String getResult(){
+        // 等待RealData构造完成
+        while(!isReady){
+            try{
+                wait(); // 一直等待, 知道RealData被注入
+            } catch (InterruptedException e){
+            }
+        }
+        return realdata.result; // 由RealData实现
+    }
+}
+
+// RealData的实现
+public class RealData implements Data{
+    protected final String result;
+    public RealData(String para){
+        // RealData 的构造可能很慢, 需要用户等待很很久, 这里使用sleep模拟
+        StringBuffer sb = new StringBuffer();
+        for(int i = 0; i < 10; i ++){
+            sb.append(para);
+            try{
+                // 这里sleep函数, 代替一个很慢的操作
+                Thread.sleep(100);
+            }catch{InterruptedException e}{
+            }
+        }
+        result = sb.toString();
+    }
+    public String getResult(){
+        return result;
+    }
+}
+```
+
+### Master-Worker模式
+> Master负责接受和分配工作, Worker则做实际的运行
+```java
+public class Master{
+    // 任务队列
+    protected Queue<Object> workQueue = new ConcurrentLinkedQueue<Object>();
+    // Worker进程队列
+    protected Map<String, Thread> threadMap = new HashMap<String, Thread>();
+    // 子任务处理结果集
+    protected Map<String, Object> resultMap = new ConcurrentHashMap<String, Object>();
+
+    // 是否所有的子任务都结束了
+    public boolean isComplete(){
+        for(Map.Entry<String, Thread> entry : threadMap.entrySet()){
+            if(entry.getValue().getState() != Thread.State.TERMINATED) return false;
+        }
+        return true;
+    }
+
+    // Master的构造, 需要一个Worker进程逻辑, 和需要的Worker进程数量
+    public Master(Worker worker, int countWorker){
+        worker.setWorkQueue(workQueue);
+        worker.setResultMap(resultMap);
+        for(int i = 0; i < countWorker; i ++){
+            threadMap.put(Integer.toString(i), new Thread(worker, Integer.toString(i)));
+        }
+    }
+
+    // 提交一个任务
+    public void submit(Object job){
+        workQueue.add(job);
+    }
+
+    // 返回子任务结果集
+    public Map<String, Object> getResultMap(){
+        return resultMap;
+    }
+
+    // 开始运行所有得儿Worker进程
+    public void execute(){
+        for(Map.Entry<String, Thread> entry:threadMap.entrySet()){
+            entry.getValue().start();
+        }
+    }
+}
+
+
+// 对应的Worker进程
+public class Worker implements Runnable{
+    // 任务队列, 用于取得子任务
+    protected Queue<Object> workQueue;
+    // 子任务处理结果集合
+    protected Map<String, Object> resultMap;
+    public void setWorkQueue(Queue<Object> workQueue){
+        this.workQueue = workQueue;
+    }
+    public void setResultMap(Map<String, Object> resultMap){
+        this.resultMap = resultMap;
+    }
+    // 子任务处理的逻辑, 在子类中实现具体逻辑
+    public Object handle(Object input){
+        return input;
+    }
+    @Override
+    public void run(){
+        while(true){
+            // 获取子任务
+            Object input = workQueue.poll();
+            if(inpuu == null) break;
+            // 处理子任务
+            Object re = handle(input);
+            // 处理结果写入结果集
+            resultMap.put(Integer.toString(input.hashCode()), re);    
+        }
+    }
+}
+```
+
+### Guarded Suspension 模式
+
+
+## JDK多任务执行框架
