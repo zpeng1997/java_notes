@@ -1120,6 +1120,7 @@ public class RealData implements Data{
 ```java
 public class Master{
     // 任务队列
+    // ConcurrentLinkedQueue是线程安全的, 
     protected Queue<Object> workQueue = new ConcurrentLinkedQueue<Object>();
     // Worker进程队列
     protected Map<String, Thread> threadMap = new HashMap<String, Thread>();
